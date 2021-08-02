@@ -9,9 +9,9 @@ import lombok.experimental.FieldDefaults;
 
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Getter @Setter
-public class Element extends JPanel{
+public class Element{
 	int width;
 	int height;
-	int x;
-	int y;
+	double x;
+	double y;
 }

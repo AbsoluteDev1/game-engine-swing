@@ -1,35 +1,68 @@
 package engine;
 
+import java.awt.BorderLayout;
+import java.awt.Canvas;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.awt.image.BufferStrategy;
 
 import javax.swing.JFrame;
 
+import engine.gameworld.GameWorld;
 import lombok.Getter;
 import lombok.extern.java.Log;
 
 @Log
-public class GameEngine {
+public class GameEngine extends Canvas implements Runnable{
+	
+	private int ticks = 0;
+	private int fps;
+	private double timeFps = 1.0 / 60.0 * 1000.0;
+	private long lastTime = 0;
+	private long timer = 0;
+	private long timerFps = 0;
+	private static final int BUFFERS_COUNT = 3;
 
-	private Thread gameloop;
 
-	private boolean enable = true;
+
+	private boolean enable = false;
 
 	private boolean stopEngine = false;
 
 	private boolean stopRender = false;
 
 	private boolean canRender = true;
+	
+	private final int WIDTH = 500;
+	private final int HEIGHT = 400;
 
 	@Getter
 	private JFrame frame;
 
 	public void init() {
-		frame=new JFrame();//creating instance of JFrame  
-		frame.setSize(400,500);//400 width and 500 height  
-		frame.setLayout(null);//using no layout managers  
-		frame.setVisible(true);//making the frame visible 
+		
+		setMinimumSize(new Dimension(WIDTH, HEIGHT));
+		setMaximumSize(new Dimension(WIDTH, HEIGHT));
+		setPreferredSize(new Dimension(WIDTH, HEIGHT));
 
+		frame = new JFrame("test");
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setLayout(new BorderLayout());
+//		this.addKeyListener(new Keyboard());
+//		this.addMouseMotionListener(new MousePicking());
+//		this.addMouseListener(new Mouse());
+//		this.addMouseMotionListener(new Mouse());
+		frame.add(this,BorderLayout.WEST);
+		frame.pack();
+
+
+		frame.setLocationRelativeTo(null);
+		frame.setVisible(true);
+		
 		frame.addWindowListener(new WindowListener() {
 
 			@Override
@@ -75,64 +108,21 @@ public class GameEngine {
 
 			}
 		});
+		
+			
 
-		initGameLoop();
 	}
-	private void initGameLoop() {
-		gameloop = new Thread() {
-			private int ticks = 0;
-			private int fps;
-			private double timeFps = 1.0 / 60.0 * 1000.0;
-			private long lastTime = 0;
-			private long timer = 0;
-			private long timerFps = 0;
-			@Override
-			public void run() {
-				while(enable) {
-					long currentTime = System.currentTimeMillis();
-					if(lastTime != 0) {						
-						double delta = currentTime - lastTime;
-						timerFps += delta;
-						timer+=delta;
-					}
-					lastTime = currentTime;
 
-					if(!stopEngine)
-					{
-						update();
-						ticks++;
-					}
-					if(timer>timeFps) {						
-						if(canRender) {
-							if(!stopRender) {
-								render();
-							}
-							fps++;
-						}						
-						timer = 0;
-					}
-					if(timerFps>1000) {
-						System.out.println("fps :"+fps);
-						fps = 0;
-						timerFps = 0;
-					}
-					try {
-						Thread.sleep(1);
-					} catch (InterruptedException e) {
-						log.warning(e.getMessage());
-					}
-
-				}
-
-			}
-
-		};
-	}
 	/**
 	 * Start the gameloop.
 	 */
 	public void start() {
-		gameloop.start();
+
+		if(!enable) {
+			enable = true;
+			System.out.println("start");
+			new Thread(this).start();	
+		}
 	}
 
 	public void resumeEngine() {
@@ -151,11 +141,79 @@ public class GameEngine {
 		stopRender = true;
 	}
 
-	public void update() {
+	public void update(double delta) {
 		// TODO apply logic.
+		Abs.getGameWorld().onUpdate(delta);
 	}
 
-	public void render() {
+	public synchronized void render() {
 		// TODO render game.
+		BufferStrategy bs = getBufferStrategy();
+		if (bs == null) {
+			createBufferStrategy(BUFFERS_COUNT);
+			return;
+		}
+		Graphics2D context = prepareCanvas(bs);
+		
+		Abs.getGameWorld().onRender(context);
+		
+		context.dispose();
+		bs.show();
+	}
+
+	private Graphics2D prepareCanvas(BufferStrategy bs) {
+		Graphics2D context = (Graphics2D) bs.getDrawGraphics().create();
+		
+		context.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		context.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+		context.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+		
+		context.setColor(Color.white);
+		context.fillRect(0, 0, WIDTH, HEIGHT);
+		return context;
+	}
+	
+	double deltaFrame = 0;
+	@Override
+	public void run() {
+		while(enable) {
+			long currentTime = System.currentTimeMillis();
+			if(lastTime != 0) {						
+				double delta = currentTime - lastTime;
+				timerFps += delta;
+				timer+=delta;
+			}
+			lastTime = currentTime;
+
+			if(!stopEngine)
+			{
+				update(deltaFrame*0.001);
+				ticks++;
+			}
+			
+			if(timer>timeFps) {	
+				deltaFrame = timer;
+				if(canRender) {
+					if(!stopRender) {
+						render();
+					}
+					fps++;
+				}						
+				timer = 0;
+			}
+			if(timerFps>1000) {
+				frame.setTitle("fps"+fps+" ticks:"+ticks);
+				fps = 0;
+				timerFps = 0;
+				ticks = 0;
+			}
+			try {
+				Thread.sleep(1);
+			} catch (InterruptedException e) {
+				log.warning(e.getMessage());
+			}
+
+		}
+
 	}
 }
